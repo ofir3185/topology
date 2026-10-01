@@ -1,0 +1,77 @@
+name: Build Network Topology
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Decode source package
+        shell: pwsh
+        run: |
+          $b64 = Get-Content source.b64 -Raw
+          [IO.File]::WriteAllBytes("source.zip", [Convert]::FromBase64String($b64))
+          Expand-Archive source.zip -DestinationPath work -Force
+          Get-ChildItem work -Recurse | Select-Object FullName
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore and build plugin
+        shell: pwsh
+        run: |
+          msbuild "work\NetworkTopology-mscp\NetworkTopology.csproj" /restore /p:Configuration=Release /p:Platform=AnyCPU /p:CIBuild=true /v:minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install WiX 5
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add WixToolset.UI.wixext/5 -g
+          wix extension add WixToolset.Util.wixext/5 -g
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $root = Join-Path (Get-Location) "work\NetworkTopology-mscp"
+          $build = Join-Path $root "bin\Release\net48"
+          wix build (Join-Path $root "installer\Product.wxs") `
+            -d Version=0.1.0 `
+            -arch x64 `
+            -ext WixToolset.UI.wixext `
+            -ext WixToolset.Util.wixext `
+            -b (Join-Path $root "installer") `
+            -bindpath "build=$build" `
+            -pdbtype none `
+            -o NetworkTopology-0.1.0-Setup.msi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build portable ZIP
+        shell: pwsh
+        run: |
+          $root = Join-Path (Get-Location) "work\NetworkTopology-mscp"
+          $build = Join-Path $root "bin\Release\net48"
+          New-Item -ItemType Directory -Force staging\NetworkTopology | Out-Null
+          Copy-Item (Join-Path $build "NetworkTopology.dll") staging\NetworkTopology\
+          Copy-Item (Join-Path $build "plugin.def") staging\NetworkTopology\
+          Copy-Item (Join-Path $build "topology.xml") staging\NetworkTopology\
+          Compress-Archive -Path staging\NetworkTopology -DestinationPath NetworkTopology-0.1.0.zip -Force
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetworkTopology-build
+          path: |
+            NetworkTopology-0.1.0-Setup.msi
+            NetworkTopology-0.1.0.zip
+          retention-days: 7
