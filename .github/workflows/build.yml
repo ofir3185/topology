@@ -24,7 +24,15 @@ jobs:
           $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ""
           [IO.File]::WriteAllBytes("source.zip", [Convert]::FromBase64String($b64))
           Expand-Archive source.zip -DestinationPath work -Force
-          Get-ChildItem work -Recurse | Select-Object FullName
+
+      - name: Apply compatibility fixes
+        shell: pwsh
+        run: |
+          $file = "work\NetworkTopology-mscp\Client\NetworkTopologyView.xaml.cs"
+          $text = Get-Content $file -Raw
+          $text = $text.Replace("Path.GetDirectoryName", "System.IO.Path.GetDirectoryName")
+          $text = $text.Replace("Path.Combine", "System.IO.Path.Combine")
+          Set-Content $file $text -Encoding UTF8
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
