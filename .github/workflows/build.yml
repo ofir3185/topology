@@ -16,10 +16,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Decode source package
+      - name: Reassemble and decode source package
         shell: pwsh
         run: |
-          $b64 = Get-Content source.b64 -Raw
+          $parts = Get-ChildItem "source.part*" | Sort-Object Name
+          if (-not $parts) { throw "No source chunks found" }
+          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ""
           [IO.File]::WriteAllBytes("source.zip", [Convert]::FromBase64String($b64))
           Expand-Archive source.zip -DestinationPath work -Force
           Get-ChildItem work -Recurse | Select-Object FullName
