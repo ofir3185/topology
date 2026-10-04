@@ -1,4 +1,4 @@
-name: Build Network Topology DLL
+name: Build Network Topology DLL v0.3
 
 on:
   push:
@@ -25,16 +25,10 @@ jobs:
           [IO.File]::WriteAllBytes("source.zip", [Convert]::FromBase64String($b64))
           Expand-Archive source.zip -DestinationPath work -Force
 
-      - name: Apply v0.2 fixes
+      - name: Overlay v0.3 interactive patch
         shell: pwsh
         run: |
-          $view = "work\NetworkTopology-mscp\Client\NetworkTopologyView.xaml.cs"
-          $text = Get-Content $view -Raw
-          $text = $text.Replace("Path.GetDirectoryName", "System.IO.Path.GetDirectoryName")
-          $text = $text.Replace("Path.Combine", "System.IO.Path.Combine")
-          Set-Content $view $text -Encoding UTF8
-
-          Copy-Item "patches\DeviceDiscoveryService.cs" "work\NetworkTopology-mscp\Services\DeviceDiscoveryService.cs" -Force
+          Copy-Item -Path "patches\v03\NetworkTopology-mscp\*" -Destination "work\NetworkTopology-mscp" -Recurse -Force
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -54,6 +48,6 @@ jobs:
       - name: Upload DLL
         uses: actions/upload-artifact@v4
         with:
-          name: NetworkTopology-DLL-v0.2
+          name: NetworkTopology-DLL-v0.3
           path: NetworkTopology.dll
           retention-days: 14
